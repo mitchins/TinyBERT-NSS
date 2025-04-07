@@ -4,9 +4,11 @@ import llm
 from enum import Enum
 import os
 from pathlib import Path
+import concurrent.futures
 
 # Where to dump the simple text responses
 OUTPUT_DIR = 'outputs'
+LLM_REQUEST_TIMEOUT = 10  # in seconds
 
 llm_models = [
     'gemma3-4b-it_local',
@@ -122,6 +124,9 @@ def get_all_prompts(passage: str, prompt_type: PromptType = None) -> List[str]:
             prompts.extend([template.format(passage=passage) for template in templates])
         return prompts
 
+def send_prompt(llm_client, passage, prompt_text):
+    return llm_client.prompt(passage, system=prompt_text, temperature=0.2)
+
 def run_all_prompts(samples_dir="samples", output_dir=OUTPUT_DIR):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -154,12 +159,17 @@ def run_all_prompts(samples_dir="samples", output_dir=OUTPUT_DIR):
                         continue
 
                     try:
-                        response = llm_client.prompt(passage, system=prompt_text, temperature=0.2)
-                        if response and hasattr(response, "text"):
-                            result = response.text()
-                        else:
-                            print(f"[SKIP] {output_path} – no valid response returned.")
-                            continue
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(send_prompt, llm_client, passage, prompt_text)
+                            response = future.result(timeout=LLM_REQUEST_TIMEOUT)
+                            if response and hasattr(response, "text"):
+                                result = response.text()
+                            else:
+                                print(f"[SKIP] {output_path} – no valid response returned.")
+                                continue
+                    except concurrent.futures.TimeoutError:
+                        print(f"[SKIP] {output_path} – prompt timed out after {LLM_REQUEST_TIMEOUT}s.")
+                        continue
                     except Exception as e:
                         print(f"[SKIP] {output_path} – LLM request failed: {e}")
                         continue

@@ -1,11 +1,9 @@
-
-
 import os
 from pathlib import Path
 from llm_utils.llm_parsers import process_llm_response, LLMResponse
 
 OUTPUT_DIR = Path("outputs")
-TRAINING_OUTPUT = Path("training_data.tsv")
+TRAINING_OUTPUT = Path("training_data.jsonl")
 
 def parse_file(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
@@ -31,14 +29,16 @@ def parse_file(file_path):
 
     return prompt, response, label
 
+import json
+
 def main():
     with open(TRAINING_OUTPUT, "w", encoding="utf-8") as out_f:
-        out_f.write("prompt\tresponse\tlabel\n")
         for file_path in OUTPUT_DIR.glob("*.txt"):
             parsed = parse_file(file_path)
             if parsed:
                 prompt, response, label = parsed
-                out_f.write(f"{prompt}\t{response}\t{label}\n")
+                json.dump({"text": response, "label": int(label)}, out_f)
+                out_f.write("\n")
 
 if __name__ == "__main__":
     main()

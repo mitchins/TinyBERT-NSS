@@ -5,6 +5,7 @@ from enum import Enum
 import os
 from pathlib import Path
 import concurrent.futures
+from tqdm import tqdm
 
 # Where to dump the simple text responses
 OUTPUT_DIR = 'outputs'
@@ -130,13 +131,15 @@ def send_prompt(llm_client, passage, prompt_text):
 def run_all_prompts(samples_dir="samples", output_dir=OUTPUT_DIR):
     os.makedirs(output_dir, exist_ok=True)
 
+    sample_files = [f for f in os.listdir(samples_dir) if f.endswith(".txt")]
+
+    total_queries = len(sample_files) * len(PROMPT_TEMPLATES) * len(next(iter(PROMPT_TEMPLATES.values()))) * len(llm_models)
+    query_index = 0
+
     for model in llm_models:
         llm_client = llm.get_model(model)
 
-        for filename in os.listdir(samples_dir):
-            if not filename.endswith(".txt"):
-                continue
-
+        for filename in tqdm(sample_files, desc=f"Processing samples for {model}"):
             with open(os.path.join(samples_dir, filename), "r") as f:
                 raw = f.read()
 
@@ -151,6 +154,8 @@ def run_all_prompts(samples_dir="samples", output_dir=OUTPUT_DIR):
 
             for prompt_type in PromptType:
                 for i, prompt_template in enumerate(PROMPT_TEMPLATES[prompt_type]):
+                    query_index += 1
+                    print(f"[{query_index}/{total_queries}] Processing: {filename} | {prompt_type.name} [{i}] | Model: {model}")
                     prompt_text = prompt_template.format(passage=passage)
 
                     output_path = Path(output_dir) / f"{sample_id}__{prompt_type.value}__{i}__{model}.txt"
